@@ -4,9 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.bitcoinj</groupId>
+        <groupId>io.bisq.bitcoinj</groupId>
         <artifactId>bitcoinj-parent</artifactId>
-        <version>0.14.4.2</version>
+        <version>MASTER-SNAPSHOT</version>
     </parent>
 
     <artifactId>wallettemplate</artifactId>
@@ -56,7 +56,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.bitcoinj</groupId>
+            <groupId>io.bisq.bitcoinj</groupId>
             <artifactId>bitcoinj-core</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
