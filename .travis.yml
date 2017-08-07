@@ -4,6 +4,17 @@ language: java
 jdk: oraclejdk8
 install: true # remove default
 
+
+# Login to travis if you have not yet $ travis login Now lets export our cert so we can encrypt it for travis.
+#
+# $ gpg --export --armor your@email.com > codesigning.asc
+# $ gpg --export-secret-keys --armor your@email.com >> codesigning.asc
+# Make sure your working directory is the git root of your project.
+# Encrypt the keys $ travis encrypt-file codesigning.asc
+# Take note of the line that looks like openssl aes-256-cbc -K...
+# Shred the un-encrypted keys $ shred --remove codesigning.asc
+# Make sure to move the created file to cd/codesigning.asc.enc
+
 env:
   global:
     - secure: "the base64 string from when you encrypted OSSRH_JIRA_USERNAME"
@@ -27,6 +38,7 @@ script:
 after_success:
   - cd ../core
   - mvn jacoco:report coveralls:report
+  #  We want to be able to decrypt that file once we are on Travis CI, so we have a script to do that for us.
   - ./cd/before-deploy.sh
   - ./cd/deploy.sh
 
