@@ -2260,10 +2260,7 @@ public class PeerGroup implements TransactionBroadcaster {
                     // We may end up with two threads trying to do this in parallel - the wallet will
                     // ignore whichever one loses the race.
                     try {
-                        // Clone transaction before adding to pending to avoid multiple wallets pointing to the same
-                        // transaction. This can happen when two wallets depend on the same transaction.
-                        wallet.receivePending(
-                                new Transaction(transaction.getParams(), transaction.bitcoinSerialize()), null);
+                        wallet.receivePending(transaction, null);
                     } catch (VerificationException e) {
                         throw new RuntimeException(e);   // Cannot fail to verify a tx we created ourselves.
                     }

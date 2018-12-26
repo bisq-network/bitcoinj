@@ -1683,6 +1683,11 @@ public class Wallet extends BaseTaggableObject
         // returned true, so we already know by this point that it sends coins to or from our wallet, or is a double
         // spend against one of our other pending transactions.
         lock.lock();
+
+        // Clone transaction to avoid multiple wallets pointing to the same transaction. This can happen when
+        // two wallets depend on the same transaction.
+        tx = tx.getParams().getDefaultSerializer().makeTransaction(tx.bitcoinSerialize());
+
         try {
             tx.verify();
             // Ignore it if we already know about this transaction. Receiving a pending transaction never moves it
