@@ -1698,6 +1698,11 @@ public class Wallet extends BaseTaggableObject
                 return;
             if (isTransactionRisky(tx, dependencies) && !acceptRiskyTransactions) {
                 // isTransactionRisky already logged the reason.
+
+                // Clone transaction to avoid multiple wallets pointing to the same transaction. This can happen when
+                // two wallets depend on the same transaction.
+                tx = tx.getParams().getDefaultSerializer().makeTransaction(tx.bitcoinSerialize());
+
                 riskDropped.put(tx.getHash(), tx);
                 log.warn("There are now {} risk dropped transactions being kept in memory", riskDropped.size());
                 return;
@@ -1712,6 +1717,10 @@ public class Wallet extends BaseTaggableObject
             if (tx.getConfidence().getSource().equals(TransactionConfidence.Source.UNKNOWN)) {
                 log.warn("Wallet received transaction with an unknown source. Consider tagging it!");
             }
+            // Clone transaction to avoid multiple wallets pointing to the same transaction. This can happen when
+            // two wallets depend on the same transaction.
+            tx = tx.getParams().getDefaultSerializer().makeTransaction(tx.bitcoinSerialize());
+
             // If this tx spends any of our unspent outputs, mark them as spent now, then add to the pending pool. This
             // ensures that if some other client that has our keys broadcasts a spend we stay in sync. Also updates the
             // timestamp on the transaction and registers/runs event listeners.
