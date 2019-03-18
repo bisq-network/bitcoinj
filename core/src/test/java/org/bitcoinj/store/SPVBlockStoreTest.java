@@ -19,6 +19,7 @@ package org.bitcoinj.store;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNull;
 
 import java.io.File;
 
@@ -86,5 +87,22 @@ public class SPVBlockStoreTest {
         SPVBlockStore store = new SPVBlockStore(UNITTEST, blockStoreFile);
         store.close();
         assertTrue (blockStoreFile.delete());
+    }
+
+    @Test
+    public void clear() throws Exception {
+        SPVBlockStore store = new SPVBlockStore(UNITTEST, blockStoreFile);
+
+        // Build a new block.
+        Address to = new ECKey().toAddress(UNITTEST);
+        StoredBlock genesis = store.getChainHead();
+        StoredBlock b1 = genesis.build(genesis.getHeader().createNextBlock(to).cloneAsHeader());
+        store.put(b1);
+        store.setChainHead(b1);
+        assertEquals(b1.getHeader().getHash(), store.getChainHead().getHeader().getHash());
+        store.clear();
+        assertNull(store.get(b1.getHeader().getHash()));
+        assertEquals(UNITTEST.getGenesisBlock().getHash(), store.getChainHead().getHeader().getHash());
+        store.close();
     }
 }

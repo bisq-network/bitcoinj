@@ -65,7 +65,7 @@ public class WalletAppKit extends AbstractIdleService {
     protected final String filePrefix;
     protected final NetworkParameters params;
     protected volatile BlockChain vChain;
-    protected volatile BlockStore vStore;
+    protected volatile SPVBlockStore vStore;
     protected volatile Wallet vWallet;
     protected volatile PeerGroup vPeerGroup;
 
@@ -218,13 +218,6 @@ public class WalletAppKit extends AbstractIdleService {
     }
 
     /**
-     * Override this to use a {@link BlockStore} that isn't the default of {@link SPVBlockStore}.
-     */
-    protected BlockStore provideBlockStore(File file) throws BlockStoreException {
-        return new SPVBlockStore(params, file);
-    }
-
-    /**
      * This method is invoked on a background thread after all objects are initialised, but before the peer group
      * or block chain download is started. You can tweak the objects configuration here.
      */
@@ -272,8 +265,7 @@ public class WalletAppKit extends AbstractIdleService {
             boolean shouldReplayWallet = (vWalletFile.exists() && !chainFileExists) || restoreFromSeed != null;
             vWallet = createOrLoadWallet(shouldReplayWallet);
 
-            // Initiate Bitcoin network objects (block store, blockchain and peer group)
-            vStore = provideBlockStore(chainFile);
+            vStore = new SPVBlockStore(params, chainFile);;
             if (!chainFileExists || restoreFromSeed != null) {
                 if (checkpoints == null && !Utils.isAndroidRuntime()) {
                     checkpoints = CheckpointManager.openStream(params);
@@ -285,12 +277,8 @@ public class WalletAppKit extends AbstractIdleService {
                     if (restoreFromSeed != null) {
                         time = restoreFromSeed.getCreationTimeSeconds();
                         if (chainFileExists) {
-                            log.info("Deleting the chain file in preparation from restore.");
-                            vStore.close();
-                            if (!chainFile.delete())
-                                throw new IOException("Failed to delete chain file in preparation for restore.");
-                            vStore = new SPVBlockStore(params, chainFile);
-                        }
+                            log.info("Clearing the chain file in preparation for restore.");
+                            vStore.clear();                        }
                     } else {
                         time = vWallet.getEarliestKeyCreationTime();
                     }
@@ -299,11 +287,8 @@ public class WalletAppKit extends AbstractIdleService {
                     else
                         log.warn("Creating a new uncheckpointed block store due to a wallet with a creation time of zero: this will result in a very slow chain sync");
                 } else if (chainFileExists) {
-                    log.info("Deleting the chain file in preparation from restore.");
-                    vStore.close();
-                    if (!chainFile.delete())
-                        throw new IOException("Failed to delete chain file in preparation for restore.");
-                    vStore = new SPVBlockStore(params, chainFile);
+                    log.info("Clearing the chain file in preparation for restore.");
+                    vStore.clear();
                 }
             }
             vChain = new BlockChain(params, vStore);
