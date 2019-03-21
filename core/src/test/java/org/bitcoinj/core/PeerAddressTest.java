@@ -21,6 +21,7 @@ import org.bitcoinj.params.MainNetParams;
 import org.junit.Test;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 
 import static org.bitcoinj.core.Utils.HEX;
 import static org.junit.Assert.assertEquals;
@@ -43,4 +44,32 @@ public class PeerAddressTest
         assertEquals("000000000000000000000000000000000000ffff7f000001208d",
                 Utils.HEX.encode(pa.bitcoinSerialize()));
     }
+
+    @Test
+    public void testOnionHostname() throws Exception {
+        PeerAddress pa = new PeerAddress(InetSocketAddress.createUnresolved("explorernuoc63nb.onion", 8333));
+        assertEquals("explorernuoc63nb.onion", pa.toSocketAddress().getHostString());
+        assertEquals("explorernuoc63nb.onion", pa.getHostname());
+        assertEquals(null, pa.getAddr());
+        assertEquals(8333, pa.toSocketAddress().getPort());
+        assertEquals(8333, pa.getPort());
+        PeerAddress pa2 = new PeerAddress(MainNetParams.get(), InetSocketAddress.createUnresolved("explorernuoc63nb.onion", 8333));
+        assertPeerAddressEqualsRegardlessOfTime(pa, pa2);
+        PeerAddress pa3 = new PeerAddress("explorernuoc63nb.onion", 8333);
+        assertPeerAddressEqualsRegardlessOfTime(pa, pa3);
+        PeerAddress pa4 = new PeerAddress(MainNetParams.get(), "explorernuoc63nb.onion", 8333);
+        assertPeerAddressEqualsRegardlessOfTime(pa, pa4);
+        byte[] serialized = pa.unsafeBitcoinSerialize();
+        PeerAddress paFromSerialized = new PeerAddress(MainNetParams.get(), serialized, 0, NetworkParameters.ProtocolVersion.CURRENT.getBitcoinProtocolVersion());
+        assertPeerAddressEqualsRegardlessOfTime(pa, paFromSerialized);
+    }
+
+    private void assertPeerAddressEqualsRegardlessOfTime(PeerAddress pa, PeerAddress pa2) {
+        assertEquals(pa.getPort(), pa2.getPort());
+        assertEquals(pa.getAddr(), pa2.getAddr());
+        assertEquals(pa.getHostname(), pa2.getHostname());
+        assertEquals(pa.getServices(), pa2.getServices());
+    }
+
+
 }
