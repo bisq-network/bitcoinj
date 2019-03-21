@@ -1,4 +1,3 @@
-// adapted from https://github.com/edazdarevic/CIDRUtils/
 /*
 * The MIT License
 *
@@ -33,6 +32,7 @@ import java.util.List;
 /**
  * A class that enables to get an IP range from CIDR specification. It supports
  * both IPv4 and IPv6.
+ * Adapted from https://github.com/edazdarevic/CIDRUtils/
  */
 public class CIDRUtils {
 
@@ -41,61 +41,30 @@ public class CIDRUtils {
     private InetAddress endAddress;
     private final int prefixLength;
 
-
-    public CIDRUtils(String cidr) {
-
-        try {
-            /* split CIDR to address and prefix part */
-            if (cidr.contains("/")) {
-                int index = cidr.indexOf("/");
-                String addressPart = cidr.substring(0, index);
-                String networkPart = cidr.substring(index + 1);
-    
-                inetAddress = InetAddress.getByName(addressPart);
-                prefixLength = Integer.parseInt(networkPart);
-    
-                calculate();
-            } else {
-                throw new IllegalArgumentException("not an valid CIDR format!");
-            }
-        } catch (UnknownHostException e) {
-            // note: no dns lookup is performed in try because these are numeric addresses.
-            throw new RuntimeException(e);  // Cannot happen.
-        }        
-    }
-
     public CIDRUtils(String addr, Integer prefixLength) {
 
         try {
             inetAddress = InetAddress.getByName(addr);
             this.prefixLength = prefixLength;
-    
             calculate();
         } catch (UnknownHostException e) {
-            // note: no dns lookup is performed in try because these are numeric addresses.
-            throw new RuntimeException(e);  // Cannot happen.
+            // No dns lookup is performed because InetAddress methods are supposed to be invoked with numeric address
+            // parameters, so this is unreachable code.
+            throw new RuntimeException(e);
         }        
     }
 
     private void calculate() throws UnknownHostException {
-
         ByteBuffer maskBuffer;
         int targetSize;
         if (inetAddress.getAddress().length == 4) {
-            maskBuffer =
-                    ByteBuffer
-                            .allocate(4)
-                            .putInt(-1);
+            maskBuffer = ByteBuffer.allocate(4).putInt(-1);
             targetSize = 4;
         } else {
-            maskBuffer = ByteBuffer.allocate(16)
-                    .putLong(-1L)
-                    .putLong(-1L);
+            maskBuffer = ByteBuffer.allocate(16).putLong(-1L).putLong(-1L);
             targetSize = 16;
         }
-
         BigInteger mask = (new BigInteger(1, maskBuffer.array())).not().shiftRight(prefixLength);
-
         BigInteger ipVal = new BigInteger(1, inetAddress.getAddress());
 
         BigInteger startIp = ipVal.and(mask);
@@ -130,15 +99,6 @@ public class CIDRUtils {
         return ret;
     }
 
-    public String getNetworkAddress() {
-
-        return this.startAddress.getHostAddress();
-    }
-
-    public String getBroadcastAddress() {
-        return this.endAddress.getHostAddress();
-    }
-
     public boolean isInRange(InetAddress address) {
         BigInteger start = new BigInteger(1, this.startAddress.getAddress());
         BigInteger end = new BigInteger(1, this.endAddress.getAddress());
@@ -149,8 +109,4 @@ public class CIDRUtils {
 
         return (st == -1 || st == 0) && (te == -1 || te == 0);
     }    
-    
-    public boolean isInRange(String ipAddress) throws UnknownHostException {
-        return isInRange(InetAddress.getByName(ipAddress));
-    }
 }

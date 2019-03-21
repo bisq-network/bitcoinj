@@ -1,5 +1,6 @@
 package org.bitcoinj.net;
 
+import org.bitcoinj.core.Utils;
 import org.bitcoinj.utils.Base32;
 
 import java.net.InetAddress;
@@ -9,19 +10,28 @@ import java.util.Arrays;
 
 
 /**
- * Created by danda on 1/12/17.
+ * Converts .onion addresses to IPv6 format and viceversa.
+ * @author danda
+ * @author Oscar Guindzberg
  */
-public class OnionCat {
+public class OnionCatConverter {
 
     /** Converts a .onion address to onioncat format
      *
-     * @param hostname
-     * @return
+     * @param hostname e.g. explorernuoc63nb.onion
+     * @return e.g. fd87:d87e:eb43:25de:b744:916d:1c2f:6da1
      */
     public static byte[] onionHostToIPV6Bytes(String hostname) {
         String needle = ".onion";
-        if( hostname.endsWith(needle) ) {
-            hostname = hostname.substring(0,hostname.length() - needle.length());
+        if(hostname.endsWith(needle)) {
+            if (hostname.length() != 22) {
+                throw new IllegalArgumentException("Invalid hostname: " + hostname);
+            }
+            hostname = hostname.substring(0, hostname.length() - needle.length());
+        } else {
+            if (hostname.length() != 16) {
+                throw new IllegalArgumentException("Invalid hostname: " + hostname);
+            }
         }
         byte[] prefix = new byte[] {(byte)0xfd, (byte)0x87, (byte)0xd8, (byte)0x7e, (byte)0xeb, (byte)0x43};
         byte[] onionaddr = Base32.base32Decode(hostname);
@@ -36,17 +46,15 @@ public class OnionCat {
         return InetAddress.getByAddress(onionHostToIPV6Bytes(hostname));
     }
 
-    public static InetSocketAddress onionHostToInetSocketAddress(String hostname, int port) throws UnknownHostException {
-        return new InetSocketAddress( onionHostToInetAddress(hostname), port);
-    }
 
-
-    /** Converts an IPV6 onioncat encoded address to a hostname
-     *
-     * @param bytes
-     * @return
+    /** Converts an IPV6 onioncat encoded address to a .onion address
+     * @param bytes e.g. fd87:d87e:eb43:25de:b744:916d:1c2f:6da1
+     * @return e.g. explorernuoc63nb.onion
      */
-    public static String IPV6BytesToOnionHost( byte[] bytes) {
+    public static String IPV6BytesToOnionHost(byte[] bytes) {
+        if (bytes.length != 16) {
+            throw new IllegalArgumentException("Invalid IPv6 address: " + Utils.HEX.encode(bytes));
+        }
         String base32 = Base32.base32Encode( Arrays.copyOfRange(bytes, 6, 16) );
         return base32.toLowerCase() + ".onion";
     }

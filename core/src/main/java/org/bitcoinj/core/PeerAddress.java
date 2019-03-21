@@ -18,8 +18,8 @@
 package org.bitcoinj.core;
 
 import com.google.common.net.InetAddresses;
-import org.bitcoinj.net.AddressChecker;
-import org.bitcoinj.net.OnionCat;
+import org.bitcoinj.net.OnionCatAddressChecker;
+import org.bitcoinj.net.OnionCatConverter;
 import org.bitcoinj.params.MainNetParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,8 +117,7 @@ public class PeerAddress extends ChildMessage {
     /**
      * Constructs a peer address from an {@link InetSocketAddress}. An InetSocketAddress can take in as parameters an
      * InetAddress or a String hostname. If you want to connect to a .onion, set the hostname to the .onion address.
-     * Protocol version is the default.  Protocol version is the default
-     * for Bitcoin.
+     * Protocol version is the default for Bitcoin.
      */
     public PeerAddress(InetSocketAddress addr) {
         /* socks addresses, eg Tor, use hostname only because no local lookup is performed.
@@ -128,13 +127,13 @@ public class PeerAddress extends ChildMessage {
         if( host != null && host.endsWith(".onion") ) {
             this.hostname = host;
             try {
-                this.addr = OnionCat.onionHostToInetAddress(this.hostname);
+                this.addr = OnionCatConverter.onionHostToInetAddress(this.hostname);
+            } catch (UnknownHostException e) {
+                // No dns lookup is performed because InetAddress method is supposed to be invoked with numeric address
+                // parameter, so this is unreachable code.
+                throw new RuntimeException(e);
             }
-            catch (UnknownHostException e) {
-                log.warn( "Invalid format for onion address: {}", this.hostname );
-            }
-        }
-        else {
+        } else {
             this.addr = checkNotNull(addr.getAddress());
         }
         this.port = addr.getPort();
@@ -188,12 +187,10 @@ public class PeerAddress extends ChildMessage {
         }
         uint64ToByteStreamLE(services, stream);  // nServices.
 
-        AddressChecker addrChecker = new AddressChecker();
         byte[] ipBytes;
-        if( addrChecker.IsOnionCatTor( addr ) ) {
-            ipBytes = OnionCat.onionHostToIPV6Bytes(hostname);
-        }
-        else if( addr != null ) {
+        if (OnionCatAddressChecker.isOnionCatTor(addr)) {
+            ipBytes = OnionCatConverter.onionHostToIPV6Bytes(hostname);
+        } else if( addr != null ) {
             // Java does not provide any utility to map an IPv4 address into IPv6 space, so we have to do it by hand.
             ipBytes = addr.getAddress();
             if (ipBytes.length == 4) {
@@ -202,12 +199,10 @@ public class PeerAddress extends ChildMessage {
                 v6addr[10] = (byte) 0xFF;
                 v6addr[11] = (byte) 0xFF;
                 ipBytes = v6addr;
-            }
-            else {
+            } else {
                 ipBytes = new byte[16];
             }
-        }
-        else {
+        } else {
             ipBytes = new byte[16];  // zero-filled.
         }
         stream.write(ipBytes);
@@ -229,12 +224,11 @@ public class PeerAddress extends ChildMessage {
             time = -1;
         services = readUint64();
         byte[] addrBytes = readBytes(16);
-        AddressChecker addrChecker = new AddressChecker();
         try {
             addr = InetAddress.getByAddress(addrBytes);
             
-            if( addrChecker.IsOnionCatTor( addr )) {
-                hostname = OnionCat.IPV6BytesToOnionHost( addr.getAddress() );
+            if( OnionCatAddressChecker.isOnionCatTor( addr )) {
+                hostname = OnionCatConverter.IPV6BytesToOnionHost( addr.getAddress() );
             }
         } catch (UnknownHostException e) {
             throw new RuntimeException(e);  // Cannot happen.
