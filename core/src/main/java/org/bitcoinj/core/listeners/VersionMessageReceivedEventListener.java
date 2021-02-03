@@ -23,10 +23,12 @@ import org.bitcoinj.core.VersionMessage;
 public interface VersionMessageReceivedEventListener {
 
     /**
-     * Called when a peer's VersionMessage is received during handshake.
+     * Called when a peer's VersionMessage is received during handshake. Peer's VersionMessage
+     * may be accessed through the Peer object; however, it is null until it is received. Here
+     * the VersionMessage is passed explicitly to be unambigious about its availability.
      *
-     * @param peer
-     * @param peerCount the total number of connected peers
+     * @param peer the peer receiving the VersionMessage
+     * @param versionMessage the received VersionMessage
      */
     void onVersionMessageReceived(Peer peer, VersionMessage versionMessage);
 }
