@@ -78,6 +78,8 @@ public class Peer extends PeerSocketHandler {
         = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<ListenerRegistration<ChainDownloadStartedEventListener>> chainDownloadStartedEventListeners
         = new CopyOnWriteArrayList<>();
+    protected final CopyOnWriteArrayList<ListenerRegistration<VersionMessageReceivedEventListener>> versionMessageReceivedEventListeners
+        = new CopyOnWriteArrayList<ListenerRegistration<VersionMessageReceivedEventListener>>();
     private final CopyOnWriteArrayList<ListenerRegistration<PeerConnectedEventListener>> connectedEventListeners
         = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<ListenerRegistration<PeerDisconnectedEventListener>> disconnectedEventListeners
@@ -291,6 +293,16 @@ public class Peer extends PeerSocketHandler {
         chainDownloadStartedEventListeners.add(new ListenerRegistration(listener, executor));
     }
 
+    /** Registers a listener that is invoked when a VersionMessage is received. */
+    public void addVersionMessageReceivedEventListener(VersionMessageReceivedEventListener listener) {
+        addVersionMessageReceivedEventListener(Threading.USER_THREAD, listener);
+    }
+
+    /** Registers a listener that is invoked when a VersionMessage is received. */
+    public void addVersionMessageReceivedEventListener(Executor executor, VersionMessageReceivedEventListener listener) {
+        versionMessageReceivedEventListeners.add(new ListenerRegistration<VersionMessageReceivedEventListener>(listener, executor));
+    }
+
     /** Registers a listener that is invoked when a peer is connected. */
     public void addConnectedEventListener(PeerConnectedEventListener listener) {
         addConnectedEventListener(Threading.USER_THREAD, listener);
@@ -347,6 +359,10 @@ public class Peer extends PeerSocketHandler {
 
     public boolean removeChainDownloadStartedEventListener(ChainDownloadStartedEventListener listener) {
         return ListenerRegistration.removeFromList(listener, chainDownloadStartedEventListeners);
+    }
+
+    public boolean removeVersionMessageReceivedEventListener(VersionMessageReceivedEventListener listener) {
+        return ListenerRegistration.removeFromList(listener, versionMessageReceivedEventListeners);
     }
 
     public boolean removeConnectedEventListener(PeerConnectedEventListener listener) {
@@ -531,6 +547,14 @@ public class Peer extends PeerSocketHandler {
         vPeerVersionMessage = peerVersionMessage;
         // Switch to the new protocol version.
         log.info(toString());
+        for (final ListenerRegistration<VersionMessageReceivedEventListener> registration : versionMessageReceivedEventListeners) {
+            registration.executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    registration.listener.onVersionMessageReceived(Peer.this, vPeerVersionMessage);
+                }
+            });
+        }
         // bitcoinj is a client mode implementation. That means there's not much point in us talking to other client
         // mode nodes because we can't download the data from them we need to find/verify transactions. Some bogus
         // implementations claim to have a block chain in their services field but then report a height of zero, filter
