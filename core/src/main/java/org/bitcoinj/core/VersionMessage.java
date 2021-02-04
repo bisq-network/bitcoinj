@@ -32,19 +32,19 @@ import java.util.Locale;
 
 /**
  * <p>A VersionMessage holds information exchanged during connection setup with another peer. Most of the fields are not
- * particularly interesting. The subVer field, since BIP 14, acts as a User-Agent string would. You can and should 
+ * particularly interesting. The subVer field, since BIP 14, acts as a User-Agent string would. You can and should
  * append to or change the subVer for your own software so other implementations can identify it, and you can look at
  * the subVer field received from other nodes to see what they are running.</p>
  *
  * <p>After creating yourself a VersionMessage, you can pass it to {@link PeerGroup#setVersionMessage(VersionMessage)}
  * to ensure it will be used for each new connection.</p>
- * 
+ *
  * <p>Instances of this class are not safe for use by multiple threads.</p>
  */
 public class VersionMessage extends Message {
 
     /** The version of this library release, as a string. */
-    public static final String BITCOINJ_VERSION = "0.15.8.bisq.13";
+    public static final String BITCOINJ_VERSION = "0.15.8.bisq.14";
     /** The value that is prepended to the subVer field of this application. */
     public static final String LIBRARY_SUBVER = "/bitcoinj:" + BITCOINJ_VERSION + "/";
 
@@ -103,7 +103,7 @@ public class VersionMessage extends Message {
     // It doesn't really make sense to ever lazily parse a version message or to retain the backing bytes.
     // If you're receiving this on the wire you need to check the protocol version and it will never need to be sent
     // back down the wire.
-    
+
     public VersionMessage(NetworkParameters params, int newBestHeight) {
         super(params);
         clientVersion = params.getProtocolVersionNum(NetworkParameters.ProtocolVersion.CURRENT);
