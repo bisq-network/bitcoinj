@@ -60,3 +60,9 @@ artifacts {
     archives sourcesJar
     archives javadocJar
 }
+
+tasks.named('jar') {
+    manifest {
+        attributes('Automatic-Module-Name': 'org.bitcoinj')
+    }
+}
