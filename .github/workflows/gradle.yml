@@ -7,23 +7,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        java: [ '8', '11', '15' ]
+#        windows-latest --> no leveldbjni64-1.8 in java.library.path
+        os: [ubuntu-latest, macOS-latest]
+        java: [ '8', '11', '17' ]
       fail-fast: false
     name: JAVA ${{ matrix.java }} OS ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
       - name: Set up JDK
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
+          distribution: 'temurin'
       - name: Build with Gradle
-        uses: gradle/gradle-build-action@v1
+        uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: 6.9
+          gradle-version: 7.4.2
           arguments: build --stacktrace
       - name: Upload Test Results and Reports
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: bitcoinj-core-test-results-jdk${{ matrix.java }}-${{ matrix.os }}

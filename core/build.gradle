@@ -1,16 +1,20 @@
-apply plugin: 'java'
-apply plugin: 'com.google.protobuf'
-apply plugin: 'maven'
-apply plugin: 'eclipse'
+import org.gradle.util.GradleVersion
 
-version = '0.15.10.bisq.16'
+plugins {
+    id 'java-library'
+    id 'com.google.protobuf'
+    id 'maven-publish'
+    id 'eclipse'
+}
+
+version = '0.15.11.bisq.16'
 archivesBaseName = 'bitcoinj-core'
 eclipse.project.name = 'bitcoinj-core'
 
 dependencies {
-    compile 'org.bouncycastle:bcprov-jdk15to18:1.63'
-    implementation 'com.google.guava:guava:28.2-android'
-    compile 'com.google.protobuf:protobuf-java:3.6.1'
+    api 'org.bouncycastle:bcprov-jdk15to18:1.67'
+    api 'com.google.guava:guava:28.2-android'
+    api 'com.google.protobuf:protobuf-java:3.6.1'
     implementation 'com.squareup.okhttp3:okhttp:3.12.8'
     implementation 'org.slf4j:slf4j-api:1.7.30'
     implementation 'net.jcip:jcip-annotations:1.0'
@@ -23,7 +27,7 @@ dependencies {
     testImplementation 'org.fusesource.leveldbjni:leveldbjni-all:1.8'
 }
 
-sourceCompatibility = 1.7
+sourceCompatibility = 1.8
 compileJava.options.encoding = 'UTF-8'
 compileTestJava.options.encoding = 'UTF-8'
 javadoc.options.encoding = 'UTF-8'
@@ -46,13 +50,23 @@ test {
     }
 }
 
+def minGradleArchiveClassifierVersion = GradleVersion.version("5.0")
+
 task javadocJar(type: Jar, dependsOn: javadoc) {
-    classifier = 'javadoc'
+    if (GradleVersion.current().compareTo(minGradleArchiveClassifierVersion) > 0) {
+        archiveClassifier.set('javadoc')
+    } else {
+        classifier = 'javadoc'
+    }
     from javadoc.destinationDir
 }
 
 task sourcesJar(type: Jar, dependsOn: classes) {
-    classifier = 'sources'
+    if (GradleVersion.current().compareTo(minGradleArchiveClassifierVersion) > 0) {
+        archiveClassifier.set('sources')
+    } else {
+        classifier = 'sources'
+    }
     from sourceSets.main.allSource
 }
 
