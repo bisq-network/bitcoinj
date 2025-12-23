@@ -39,15 +39,18 @@ import static com.google.common.base.Preconditions.*;
  */
 public class SPVBlockStore implements BlockStore {
     private static final Logger log = LoggerFactory.getLogger(SPVBlockStore.class);
+    protected final ReentrantLock lock = Threading.lock(SPVBlockStore.class);
 
     /** The default number of headers that will be stored in the ring buffer. */
-    public static final int DEFAULT_CAPACITY = 5000;
+    public static final int DEFAULT_CAPACITY = 10000;
     public static final String HEADER_MAGIC = "SPVB";
+    // Magic header for the V1 format.
+    static final byte[] HEADER_MAGIC_V1 = HEADER_MAGIC.getBytes(StandardCharsets.US_ASCII);
+    // Magic header for the V2 format.
+    static final byte[] HEADER_MAGIC_V2 = "SPV2".getBytes(StandardCharsets.US_ASCII);
 
     protected volatile MappedByteBuffer buffer;
     protected final NetworkParameters params;
-
-    protected ReentrantLock lock = Threading.lock("SPVBlockStore");
 
     // The entire ring-buffer is mmapped and accessing it should be as fast as accessing regular memory once it's
     // faulted in. Unfortunately, in theory practice and theory are the same. In practice they aren't.
@@ -78,8 +81,8 @@ public class SPVBlockStore implements BlockStore {
     // Used to stop other applications/processes from opening the store.
     protected FileLock fileLock = null;
     protected RandomAccessFile randomAccessFile = null;
+    private final FileChannel channel;
     private int fileLength;
-    private final String fileAbsolutePath;
 
     /**
      * Creates and initializes an SPV block store that can hold {@link #DEFAULT_CAPACITY} block headers. Will create the
@@ -101,55 +104,76 @@ public class SPVBlockStore implements BlockStore {
      */
     public SPVBlockStore(NetworkParameters params, File file, int capacity, boolean grow) throws BlockStoreException {
         checkNotNull(file);
-        fileAbsolutePath = file.getAbsolutePath();
         this.params = checkNotNull(params);
         checkArgument(capacity > 0);
+
         try {
             boolean exists = file.exists();
-            // Set up the backing file.
-            randomAccessFile = new RandomAccessFile(file, "rw");
-            fileLength = getFileSize(capacity);
-            if (!exists) {
-                log.info("Creating new SPV block chain file " + file);
-                randomAccessFile.setLength(fileLength);
-            } else {
-                final long currentLength = randomAccessFile.length();
-                if (currentLength != fileLength) {
-                    if ((currentLength - FILE_PROLOGUE_BYTES) % RECORD_SIZE != 0)
-                        throw new BlockStoreException(
-                                "File size on disk indicates this is not a block store: " + currentLength);
-                    else if (!grow)
-                        throw new BlockStoreException("File size on disk does not match expected size: " + currentLength
-                                + " vs " + fileLength);
-                    else if (fileLength < randomAccessFile.length())
-                        throw new BlockStoreException(
-                                "Shrinking is unsupported: " + currentLength + " vs " + fileLength);
-                    else
-                        randomAccessFile.setLength(fileLength);
-                }
-            }
 
-            FileChannel channel = randomAccessFile.getChannel();
+            // Set up the backing file, empty if it doesn't exist.
+            randomAccessFile = new RandomAccessFile(file, "rw");
+            channel = randomAccessFile.getChannel();
+
+            // Lock the file.
             fileLock = channel.tryLock();
             if (fileLock == null)
                 throw new ChainFileLockedException("Store file is already locked by another process");
 
-            // Map it into memory read/write. The kernel will take care of flushing writes to disk at the most
-            // efficient times, which may mean that until the map is deallocated the data on disk is randomly
-            // inconsistent. However the only process accessing it is us, via this mapping, so our own view will
-            // always be correct. Once we establish the mmap the underlying file and channel can go away. Note that
-            // the details of mmapping vary between platforms.
-            buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, fileLength);
-
-            // Check or initialize the header bytes to ensure we don't try to open some random file.
+            // Ensure expected file size, grow if desired.
+            fileLength = getFileSize(capacity);
+            byte[] currentHeader = new byte[4];
             if (exists) {
-                byte[] header = new byte[4];
-                buffer.get(header);
-                if (!new String(header, StandardCharsets.US_ASCII).equals(HEADER_MAGIC))
-                    throw new BlockStoreException("Header bytes do not equal " + HEADER_MAGIC);
+                log.info("Using existing SPV block chain file: " + file);
+                // Map it into memory read/write. The kernel will take care of flushing writes to disk at the most
+                // efficient times, which may mean that until the map is deallocated the data on disk is randomly
+                // inconsistent. However the only process accessing it is us, via this mapping, so our own view will
+                // always be correct. Once we establish the mmap the underlying file and channel can go away. Note that
+                // the details of mmapping vary between platforms.
+                buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, randomAccessFile.length());
+                buffer.get(currentHeader);
             } else {
+                log.info("Creating new SPV block chain file: " + file);
+                randomAccessFile.setLength(fileLength);
+                // Map it into memory read/write. See above comment.
+                buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, fileLength);
                 initNewStore(params);
             }
+
+            // Maybe migrate V1 to V2 format.
+            if (Arrays.equals(HEADER_MAGIC_V1, currentHeader)) {
+                log.info("Migrating SPV block chain file from V1 to V2 format: " + file);
+                migrateV1toV2();
+            }
+
+            // Maybe grow.
+            if (exists) {
+                final long currentLength = randomAccessFile.length();
+                if (currentLength != fileLength) {
+                    if ((currentLength - FILE_PROLOGUE_BYTES) % RECORD_SIZE_V2 != 0) {
+                        throw new BlockStoreException(
+                                "File size on disk indicates this is not a V2 block store: " + currentLength);
+                    } else if (!grow) {
+                        throw new BlockStoreException("File size on disk does not match expected size: " + currentLength
+                                + " vs " + fileLength);
+                    } else if (fileLength < randomAccessFile.length()) {
+                        throw new BlockStoreException(
+                                "Shrinking is unsupported: " + currentLength + " vs " + fileLength);
+                    } else {
+                        randomAccessFile.setLength(fileLength);
+                        // Map it into memory again because of the length change.
+                        buffer.force();
+                        buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, fileLength);
+                    }
+                }
+            }
+
+            // Check the header bytes to ensure we don't try to open some random file.
+            byte[] header = new byte[4];
+            ((Buffer) buffer).rewind();
+            buffer.get(currentHeader);
+            if (!Arrays.equals(currentHeader, HEADER_MAGIC_V2))
+                throw new BlockStoreException("Magic header V2 expected: " + new String(currentHeader,
+                        StandardCharsets.US_ASCII));
         } catch (Exception e) {
             try {
                 if (randomAccessFile != null) randomAccessFile.close();
@@ -161,13 +185,12 @@ public class SPVBlockStore implements BlockStore {
     }
 
     private void initNewStore(NetworkParameters params) throws Exception {
-        byte[] header;
-        header = HEADER_MAGIC.getBytes("US-ASCII");
-        buffer.put(header);
+        ((Buffer) buffer).rewind();
+        buffer.put(HEADER_MAGIC_V2);
         // Insert the genesis block.
         lock.lock();
         try {
-            setRingCursor(buffer, FILE_PROLOGUE_BYTES);
+            setRingCursor(FILE_PROLOGUE_BYTES);
         } finally {
             lock.unlock();
         }
@@ -177,9 +200,43 @@ public class SPVBlockStore implements BlockStore {
         setChainHead(storedGenesis);
     }
 
+    private void migrateV1toV2() throws BlockStoreException, IOException {
+        long currentLength = randomAccessFile.length();
+        long currentBlocksLength = currentLength - FILE_PROLOGUE_BYTES;
+        if (currentBlocksLength % RECORD_SIZE_V1 != 0)
+            throw new BlockStoreException(
+                    "File size on disk indicates this is not a V1 block store: " + currentLength);
+        int currentCapacity = (int) (currentBlocksLength / RECORD_SIZE_V1);
+
+        randomAccessFile.setLength(fileLength);
+        // Map it into memory again because of the length change.
+        buffer.force();
+        buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, fileLength);
+
+        // migrate magic header
+        ((Buffer) buffer).rewind();
+        buffer.put(HEADER_MAGIC_V2);
+
+        // migrate headers
+        final byte[] zeroPadding = new byte[20]; // 32 (V2 work) - 12 (V1 work)
+        for (int i = currentCapacity - 1; i >= 0; i--) {
+            byte[] record = new byte[RECORD_SIZE_V1];
+            ((Buffer) buffer).position(FILE_PROLOGUE_BYTES + i * RECORD_SIZE_V1);
+            buffer.get(record);
+            ((Buffer) buffer).position(FILE_PROLOGUE_BYTES + i * RECORD_SIZE_V2);
+            buffer.put(record, 0, 32); // hash
+            buffer.put(zeroPadding);
+            buffer.put(record, 32, RECORD_SIZE_V1 - 32); // work, height, block header
+        }
+
+        // migrate cursor
+        int cursorRecord = (getRingCursor() - FILE_PROLOGUE_BYTES) / RECORD_SIZE_V1;
+        setRingCursor(FILE_PROLOGUE_BYTES + cursorRecord * RECORD_SIZE_V2);
+    }
+
     /** Returns the size in bytes of the file that is used to store the chain with the current parameters. */
     public static final int getFileSize(int capacity) {
-        return RECORD_SIZE * capacity + FILE_PROLOGUE_BYTES /* extra kilobyte for stuff */;
+        return RECORD_SIZE_V2 * capacity + FILE_PROLOGUE_BYTES /* extra kilobyte for stuff */;
     }
 
     @Override
@@ -189,17 +246,17 @@ public class SPVBlockStore implements BlockStore {
 
         lock.lock();
         try {
-            int cursor = getRingCursor(buffer);
+            int cursor = getRingCursor();
             if (cursor == fileLength) {
                 // Wrapped around.
                 cursor = FILE_PROLOGUE_BYTES;
             }
-            buffer.position(cursor);
+            ((Buffer) buffer).position(cursor);
             Sha256Hash hash = block.getHeader().getHash();
             notFoundCache.remove(hash);
             buffer.put(hash.getBytes());
-            block.serializeCompact(buffer);
-            setRingCursor(buffer, buffer.position());
+            block.serializeCompactV2(buffer);
+            setRingCursor(buffer.position());
             blockCache.put(hash, block);
         } finally { lock.unlock(); }
     }
@@ -220,22 +277,22 @@ public class SPVBlockStore implements BlockStore {
 
             // Starting from the current tip of the ring work backwards until we have either found the block or
             // wrapped around.
-            int cursor = getRingCursor(buffer);
+            int cursor = getRingCursor();
             final int startingPoint = cursor;
             final byte[] targetHashBytes = hash.getBytes();
             byte[] scratch = new byte[32];
             do {
-                cursor -= RECORD_SIZE;
+                cursor -= RECORD_SIZE_V2;
                 if (cursor < FILE_PROLOGUE_BYTES) {
                     // We hit the start, so wrap around.
-                    cursor = fileLength - RECORD_SIZE;
+                    cursor = fileLength - RECORD_SIZE_V2;
                 }
                 // Cursor is now at the start of the next record to check, so read the hash and compare it.
-                buffer.position(cursor);
+                ((Buffer) buffer).position(cursor);
                 buffer.get(scratch);
                 if (Arrays.equals(scratch, targetHashBytes)) {
                     // Found the target.
-                    StoredBlock storedBlock = StoredBlock.deserializeCompact(params, buffer);
+                    StoredBlock storedBlock = StoredBlock.deserializeCompactV2(params, buffer);
                     blockCache.put(hash, storedBlock);
                     return storedBlock;
                 }
@@ -259,13 +316,12 @@ public class SPVBlockStore implements BlockStore {
         try {
             if (lastChainHead == null) {
                 byte[] headHash = new byte[32];
-                buffer.position(8);
+                ((Buffer) buffer).position(8);
                 buffer.get(headHash);
                 Sha256Hash hash = Sha256Hash.wrap(headHash);
                 StoredBlock block = get(hash);
-                if (block == null) 
-                    throw new BlockStoreException("Corrupted block store: could not find chain head: " + hash 
-                                                          +"\nFile path: "+ fileAbsolutePath);
+                if (block == null)
+                    throw new BlockStoreException("Corrupted block store: could not find chain head: " + hash);
                 lastChainHead = block;
             }
             return lastChainHead;
@@ -281,7 +337,7 @@ public class SPVBlockStore implements BlockStore {
         try {
             lastChainHead = chainHead;
             byte[] headHash = chainHead.getHeader().getHash().getBytes();
-            buffer.position(8);
+            ((Buffer) buffer).position(8);
             buffer.put(headHash);
         } finally { lock.unlock(); }
     }
@@ -291,6 +347,7 @@ public class SPVBlockStore implements BlockStore {
         try {
             buffer.force();
             buffer = null;  // Allow it to be GCd and the underlying file mapping to go away.
+            fileLock.release();
             randomAccessFile.close();
             blockCache.clear();
         } catch (IOException e) {
@@ -303,28 +360,30 @@ public class SPVBlockStore implements BlockStore {
         return params;
     }
 
-    protected static final int RECORD_SIZE = 32 /* hash */ + StoredBlock.COMPACT_SERIALIZED_SIZE;
+    static final int RECORD_SIZE_V1 = 32 /* hash */ + StoredBlock.COMPACT_SERIALIZED_SIZE;
+    static final int RECORD_SIZE_V2 = 32 /* hash */ + StoredBlock.COMPACT_SERIALIZED_SIZE_V2;
 
-    // File format:
-    //   4 header bytes = "SPVB"
+    // V2 file format, V1 in parenthesis:
+    //   4 magic header bytes = "SPV2" ("SPVB" for V1)
     //   4 cursor bytes, which indicate the offset from the first kb where the next block header should be written.
     //   32 bytes for the hash of the chain head
     //
-    // For each header (128 bytes)
+    // For each header:
     //   32 bytes hash of the header
-    //   12 bytes of chain work
+    //   32 bytes of chain work (12 bytes for V1)
     //    4 bytes of height
     //   80 bytes of block header data
+
     protected static final int FILE_PROLOGUE_BYTES = 1024;
 
     /** Returns the offset from the file start where the latest block should be written (end of prev block). */
-    private int getRingCursor(ByteBuffer buffer) {
+    int getRingCursor() {
         int c = buffer.getInt(4);
         checkState(c >= FILE_PROLOGUE_BYTES, "Integer overflow");
         return c;
     }
 
-    private void setRingCursor(ByteBuffer buffer, int newCursor) {
+    private void setRingCursor(int newCursor) {
         checkArgument(newCursor >= 0);
         buffer.putInt(4, newCursor);
     }
@@ -336,13 +395,12 @@ public class SPVBlockStore implements BlockStore {
             blockCache.clear();
             notFoundCache.clear();
             // Clear file content
-            buffer.position(0);
+            ((Buffer) buffer).position(0);
             long fileLength = randomAccessFile.length();
             for (int i = 0; i < fileLength; i++) {
                 buffer.put((byte)0);
             }
             // Initialize store again
-            buffer.position(0);
             initNewStore(params);
         } finally { lock.unlock(); }
     }
