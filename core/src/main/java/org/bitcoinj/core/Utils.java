@@ -418,6 +418,13 @@ public class Utils {
     }
 
     /**
+     * Clears the mock clock and sleep
+     */
+    public static void resetMocking() {
+        mockTime = null;
+    }
+
+    /**
      * Returns the current time, or a mocked out equivalent.
      */
     public static Date now() {
