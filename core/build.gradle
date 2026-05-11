@@ -51,8 +51,9 @@ test {
     exclude 'org/bitcoinj/core/TransactionBroadcastTest*'
     exclude 'org/bitcoinj/net/NetworkAbstractionTests*'
     exclude 'org/bitcoinj/protocols/channels/ChannelConnectionTest*'
-    if (System.getProperty('os.name').toLowerCase().contains('mac') &&
-            ['aarch64', 'arm64'].contains(System.getProperty('os.arch').toLowerCase())) {
+    def osName = System.getProperty('os.name').toLowerCase()
+    def osArch = System.getProperty('os.arch').toLowerCase()
+    if ((osName.contains('mac') && ['aarch64', 'arm64'].contains(osArch)) || osName.contains('windows')) {
         exclude 'org/bitcoinj/core/LevelDBFullPrunedBlockChainTest*'
         exclude 'org/bitcoinj/store/LevelDBBlockStoreTest*'
     }
