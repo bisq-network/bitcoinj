@@ -33,7 +33,7 @@ import static com.google.common.base.Preconditions.*;
 /**
  * You can derive from this class and call peerGroup.start() in your tests to get a functional PeerGroup that can be
  * used with loopback peers created using connectPeer. This involves real TCP connections so is a pretty accurate
- * mock, but means unit tests cannot be run simultaneously.
+ * mock.
  */
 public class TestWithPeerGroup extends TestWithNetworkConnections {
     protected PeerGroup peerGroup;
@@ -120,7 +120,7 @@ public class TestWithPeerGroup extends TestWithNetworkConnections {
 
     protected InboundMessageQueuer connectPeerWithoutVersionExchange(int id) throws Exception {
         Preconditions.checkArgument(id < PEER_SERVERS);
-        InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getLoopbackAddress(), 2000 + id);
+        InetSocketAddress remoteAddress = peerServerAddress(id);
         Peer peer = peerGroup.connectTo(remoteAddress).getConnectionOpenFuture().get();
         InboundMessageQueuer writeTarget = newPeerWriteTargetQueue.take();
         writeTarget.peer = peer;

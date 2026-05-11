@@ -76,6 +76,11 @@ public class NioServer extends AbstractExecutionThreadService {
         sc.register(selector, SelectionKey.OP_ACCEPT);
     }
 
+    @VisibleForTesting
+    public InetSocketAddress getServerAddress() {
+        return (InetSocketAddress) sc.socket().getLocalSocketAddress();
+    }
+
     @Override
     protected void run() throws Exception {
         try {

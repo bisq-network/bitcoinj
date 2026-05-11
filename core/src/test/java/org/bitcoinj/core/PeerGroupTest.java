@@ -544,10 +544,13 @@ public class PeerGroupTest extends TestWithPeerGroup {
     @Ignore("disabled for now as this test is too flaky")
     public void peerPriority() throws Exception {
         final List<InetSocketAddress> addresses = Lists.newArrayList(
-                new InetSocketAddress("localhost", 2000),
-                new InetSocketAddress("localhost", 2001),
-                new InetSocketAddress("localhost", 2002)
+                peerServerAddress(0),
+                peerServerAddress(1),
+                peerServerAddress(2)
         );
+        int peer1Port = peerServerAddress(1).getPort();
+        int peer2Port = peerServerAddress(2).getPort();
+        int peer3Port = peerServerAddress(3).getPort();
         peerGroup.addConnectedEventListener(connectedListener);
         peerGroup.addDisconnectedEventListener(disconnectedListener);
         peerGroup.addPreMessageReceivedEventListener(preMessageReceivedListener);
@@ -577,39 +580,41 @@ public class PeerGroupTest extends TestWithPeerGroup {
         connectedPeers.take();
         connectedPeers.take();
         addresses.clear();
-        addresses.addAll(Lists.newArrayList(new InetSocketAddress("localhost", 2003)));
+        addresses.addAll(Lists.newArrayList(peerServerAddress(3)));
         stopPeerServer(2);
-        assertEquals(2002, disconnectedPeers.take().getAddress().getPort()); // peer died
+        assertEquals(peer2Port, disconnectedPeers.take().getAddress().getPort()); // peer died
 
         // discovers, connects to new peer
         jobBlocks.release(1);
         handleConnectToPeer(3);
-        assertEquals(2003, connectedPeers.take().getAddress().getPort());
+        assertEquals(peer3Port, connectedPeers.take().getAddress().getPort());
 
         stopPeerServer(1);
-        assertEquals(2001, disconnectedPeers.take().getAddress().getPort()); // peer died
+        assertEquals(peer1Port, disconnectedPeers.take().getAddress().getPort()); // peer died
 
         // Alternates trying two offline peers
         jobBlocks.release(10);
-        assertEquals(2001, disconnectedPeers.take().getAddress().getPort());
-        assertEquals(2002, disconnectedPeers.take().getAddress().getPort());
-        assertEquals(2001, disconnectedPeers.take().getAddress().getPort());
-        assertEquals(2002, disconnectedPeers.take().getAddress().getPort());
-        assertEquals(2001, disconnectedPeers.take().getAddress().getPort());
+        assertEquals(peer1Port, disconnectedPeers.take().getAddress().getPort());
+        assertEquals(peer2Port, disconnectedPeers.take().getAddress().getPort());
+        assertEquals(peer1Port, disconnectedPeers.take().getAddress().getPort());
+        assertEquals(peer2Port, disconnectedPeers.take().getAddress().getPort());
+        assertEquals(peer1Port, disconnectedPeers.take().getAddress().getPort());
 
         // Peer 2 comes online
         startPeerServer(2);
+        peer2Port = peerServerAddress(2).getPort();
+        addresses.add(peerServerAddress(2));
         jobBlocks.release(1);
         handleConnectToPeer(2);
-        assertEquals(2002, connectedPeers.take().getAddress().getPort());
+        assertEquals(peer2Port, connectedPeers.take().getAddress().getPort());
 
         jobBlocks.release(6);
         stopPeerServer(2);
-        assertEquals(2002, disconnectedPeers.take().getAddress().getPort()); // peer died
+        assertEquals(peer2Port, disconnectedPeers.take().getAddress().getPort()); // peer died
 
         // Peer 2 is tried before peer 1, since it has a lower backoff due to recent success
-        assertEquals(2002, disconnectedPeers.take().getAddress().getPort());
-        assertEquals(2001, disconnectedPeers.take().getAddress().getPort());
+        assertEquals(peer2Port, disconnectedPeers.take().getAddress().getPort());
+        assertEquals(peer1Port, disconnectedPeers.take().getAddress().getPort());
     }
 
     @Test
