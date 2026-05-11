@@ -10,8 +10,8 @@ eclipse.project.name = 'bitcoinj-core'
 dependencies {
     api 'org.bouncycastle:bcprov-jdk15to18:1.63'
     implementation 'com.google.guava:guava:28.2-android'
-    api 'com.google.protobuf:protobuf-java:3.6.1'
-    implementation 'com.squareup.okhttp3:okhttp:3.12.8'
+    api 'com.google.protobuf:protobuf-java:3.25.9'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'org.slf4j:slf4j-api:1.7.30'
     implementation 'net.jcip:jcip-annotations:1.0'
     compileOnly 'org.fusesource.leveldbjni:leveldbjni-all:1.8'
@@ -26,7 +26,7 @@ dependencies {
 
 protobuf {
     protoc {
-        artifact = 'com.google.protobuf:protoc:3.6.1'
+        artifact = 'com.google.protobuf:protoc:3.25.9'
     }
     generatedFilesBaseDir = new File(projectDir, '/src') // workaround for '$projectDir/src'
 }
