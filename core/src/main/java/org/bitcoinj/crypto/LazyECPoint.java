@@ -21,8 +21,12 @@ import org.bouncycastle.math.ec.ECFieldElement;
 import org.bouncycastle.math.ec.ECPoint;
 
 import javax.annotation.Nullable;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -36,11 +40,15 @@ public class LazyECPoint {
 
     private final ECCurve curve;
     private final byte[] bits;
+    private final boolean compressed;
 
     // This field is effectively final - once set it won't change again. However it can be set after
     // construction.
     @Nullable
     private ECPoint point;
+
+    private static final ReferenceQueue<ECPoint> pointReferenceQueue = new ReferenceQueue<>();
+    private static final Map<IdentityPointReference, Boolean> pointCompression = new HashMap<>();
 
     /**
      * Construct a LazyECPoint from a public key. Due to the delayed decoding of the point the validation of the
@@ -52,6 +60,7 @@ public class LazyECPoint {
     public LazyECPoint(ECCurve curve, byte[] bits) {
         this.curve = curve;
         this.bits = bits;
+        this.compressed = isCompressedEncoding(bits);
     }
 
     /**
@@ -60,14 +69,19 @@ public class LazyECPoint {
      * @param point      the wrapped point
      */
     public LazyECPoint(ECPoint point) {
-        this.point = checkNotNull(point);
+        this(point, false);
+    }
+
+    public LazyECPoint(ECPoint point, boolean compressed) {
+        this.point = rememberCompression(checkNotNull(point), compressed);
         this.curve = null;
         this.bits = null;
+        this.compressed = compressed;
     }
 
     public ECPoint get() {
         if (point == null)
-            point = curve.decodePoint(bits);
+            point = rememberCompression(curve.decodePoint(bits), compressed);
         return point;
     }
 
@@ -78,10 +92,7 @@ public class LazyECPoint {
     }
 
     public byte[] getEncoded() {
-        if (bits != null)
-            return Arrays.copyOf(bits, bits.length);
-        else
-            return get().getEncoded();
+        return getEncoded(compressed);
     }
 
     public boolean isInfinity() {
@@ -105,10 +116,7 @@ public class LazyECPoint {
     }
 
     public boolean isCompressed() {
-        if (bits != null)
-            return bits[0] == 2 || bits[0] == 3;
-        else
-            return get().isCompressed();
+        return compressed;
     }
 
     public ECPoint multiply(BigInteger k) {
@@ -208,5 +216,60 @@ public class LazyECPoint {
 
     private byte[] getCanonicalEncoding() {
         return getEncoded(true);
+    }
+
+    private static boolean isCompressedEncoding(byte[] bits) {
+        return bits.length > 0 && (bits[0] == 2 || bits[0] == 3);
+    }
+
+    public static boolean getCompression(ECPoint point, boolean defaultValue) {
+        synchronized (pointCompression) {
+            removeCollectedPointReferences();
+            Boolean compressed = pointCompression.get(new IdentityPointReference(point));
+            return compressed != null ? compressed : defaultValue;
+        }
+    }
+
+    private static ECPoint rememberCompression(ECPoint point, boolean compressed) {
+        synchronized (pointCompression) {
+            removeCollectedPointReferences();
+            pointCompression.put(new IdentityPointReference(point, pointReferenceQueue), compressed);
+        }
+        return point;
+    }
+
+    private static void removeCollectedPointReferences() {
+        IdentityPointReference reference;
+        while ((reference = (IdentityPointReference) pointReferenceQueue.poll()) != null)
+            pointCompression.remove(reference);
+    }
+
+    private static final class IdentityPointReference extends WeakReference<ECPoint> {
+        private final int hashCode;
+
+        private IdentityPointReference(ECPoint point) {
+            super(point);
+            hashCode = System.identityHashCode(point);
+        }
+
+        private IdentityPointReference(ECPoint point, ReferenceQueue<ECPoint> queue) {
+            super(point, queue);
+            hashCode = System.identityHashCode(point);
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
+
+        @Override
+        public boolean equals(Object object) {
+            if (this == object)
+                return true;
+            if (!(object instanceof IdentityPointReference))
+                return false;
+            ECPoint point = get();
+            return point != null && point == ((IdentityPointReference) object).get();
+        }
     }
 }

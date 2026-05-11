@@ -89,7 +89,7 @@ public class DeterministicKey extends ECKey {
                             byte[] chainCode,
                             BigInteger priv,
                             @Nullable DeterministicKey parent) {
-        super(priv, compressPoint(ECKey.publicPointFromPrivate(priv)));
+        super(priv, new LazyECPoint(ECKey.publicPointFromPrivate(priv), true));
         checkArgument(chainCode.length == 32);
         this.parent = parent;
         this.childNumberPath = checkNotNull(childNumberPath);
@@ -157,7 +157,7 @@ public class DeterministicKey extends ECKey {
                             @Nullable DeterministicKey parent,
                             int depth,
                             int parentFingerprint) {
-        super(priv, compressPoint(ECKey.publicPointFromPrivate(priv)));
+        super(priv, new LazyECPoint(ECKey.publicPointFromPrivate(priv), true));
         checkArgument(chainCode.length == 32);
         this.parent = parent;
         this.childNumberPath = checkNotNull(childNumberPath);
@@ -169,7 +169,7 @@ public class DeterministicKey extends ECKey {
     
     /** Clones the key */
     public DeterministicKey(DeterministicKey keyToClone, DeterministicKey newParent) {
-        super(keyToClone.priv, keyToClone.pub.get());
+        super(keyToClone.priv, new LazyECPoint(ECKey.CURVE.getCurve(), keyToClone.pub.getEncoded()));
         this.parent = newParent;
         this.childNumberPath = keyToClone.childNumberPath;
         this.chainCode = keyToClone.chainCode;
