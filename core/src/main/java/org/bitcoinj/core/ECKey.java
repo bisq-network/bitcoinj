@@ -795,6 +795,20 @@ public class ECKey implements EncryptableItem {
         return true;
     }
 
+    /**
+     * Returns true if the given pubkey is in its compressed form.
+     */
+    public static boolean isPubKeyCompressed(byte[] encoded) {
+        if (encoded.length == 33 && (encoded[0] == 0x02 || encoded[0] == 0x03))
+            return true;
+        else if (encoded.length == 65 && encoded[0] == 0x04)
+            return false;
+        else
+            throw new IllegalArgumentException("Invalid public key encoding: length=" + encoded.length +
+                    ", prefix=" + (encoded.length > 0 ? String.format("0x%02x", encoded[0]) : "none") +
+                    ", hex=" + Utils.HEX.encode(encoded));
+    }
+
     private static ECKey extractKeyFromASN1(byte[] asn1privkey) {
         // To understand this code, see the definition of the ASN.1 format for EC private keys in the OpenSSL source
         // code in ec_asn1.c:
