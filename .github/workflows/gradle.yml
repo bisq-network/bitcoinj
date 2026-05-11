@@ -7,7 +7,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macOS-15-intel, windows-2019]
+        os: [ubuntu-22.04, macos-15-intel, macos-15, windows-2019]
         java: ['21']
         distribution: ['zulu']
       fail-fast: false
