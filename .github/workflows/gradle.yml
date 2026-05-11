@@ -22,9 +22,10 @@ jobs:
           java-version: ${{ matrix.java }}
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
       - name: Run Gradle
-        shell: bash
-        run: ./gradlew build --stacktrace
+        run: gradle build --stacktrace
       - name: Upload Test Results and Reports
         uses: actions/upload-artifact@v4
         if: always()
