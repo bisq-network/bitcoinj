@@ -18,9 +18,11 @@ allprojects {
 
 subprojects {
     plugins.withType(JavaPlugin).configureEach {
-        java {
-            toolchain {
-                languageVersion = JavaLanguageVersion.of(21)
+        if (System.getenv('JITPACK') != 'true') {
+            java {
+                toolchain {
+                    languageVersion = JavaLanguageVersion.of(21)
+                }
             }
         }
 
