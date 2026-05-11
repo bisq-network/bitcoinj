@@ -26,13 +26,29 @@ dependencies {
 
 protobuf {
     protoc {
-        artifact = 'com.google.protobuf:protoc:3.6.1'
+        if (System.getProperty('os.name').toLowerCase().contains('mac') &&
+                ['aarch64', 'arm64'].contains(System.getProperty('os.arch').toLowerCase())) {
+            artifact = 'com.google.protobuf:protoc:3.6.1:osx-x86_64'
+        } else {
+            artifact = 'com.google.protobuf:protoc:3.6.1'
+        }
     }
-    generatedFilesBaseDir = new File(projectDir, '/src') // workaround for '$projectDir/src'
+    generatedFilesBaseDir = new File(projectDir, 'src') // workaround for '$projectDir/src'
 }
 
-tasks.matching { it.name in ['extractIncludeProto', 'extractProto', 'generateProto'] }.configureEach {
-    enabled = false
+// Protobuf Java sources are checked in under src. With protobuf-gradle-plugin 0.9.x, the task
+// still generates under build/ first, so keep that intermediate output off the javac source path.
+sourceSets {
+    main.java.setSrcDirs(['src/main/java'])
+    test.java.setSrcDirs(['src/test/java'])
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('generateProto')
+}
+
+tasks.named('compileTestJava') {
+    dependsOn tasks.named('generateTestProto')
 }
 
 test {
