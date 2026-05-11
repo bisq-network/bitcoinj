@@ -3,7 +3,7 @@ apply plugin: 'com.google.protobuf'
 apply plugin: 'maven-publish'
 apply plugin: 'eclipse'
 
-version = '0.15.10.bisq.17'
+version = '0.15.10.bisq.18'
 archivesBaseName = 'bitcoinj-core'
 eclipse.project.name = 'bitcoinj-core'
 
