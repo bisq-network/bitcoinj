@@ -26,12 +26,7 @@ dependencies {
 
 protobuf {
     protoc {
-        if (System.getProperty('os.name').toLowerCase().contains('mac') &&
-                ['aarch64', 'arm64'].contains(System.getProperty('os.arch').toLowerCase())) {
-            artifact = 'com.google.protobuf:protoc:3.25.9:osx-x86_64'
-        } else {
-            artifact = 'com.google.protobuf:protoc:3.25.9'
-        }
+        artifact = 'com.google.protobuf:protoc:3.25.9'
     }
     generatedFilesBaseDir = new File(projectDir, 'src') // workaround for '$projectDir/src'
 }
