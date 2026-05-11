@@ -1,6 +1,6 @@
-apply plugin: 'java'
+apply plugin: 'java-library'
 apply plugin: 'com.google.protobuf'
-apply plugin: 'maven'
+apply plugin: 'maven-publish'
 apply plugin: 'eclipse'
 
 version = '0.15.10.bisq.17'
@@ -8,9 +8,9 @@ archivesBaseName = 'bitcoinj-core'
 eclipse.project.name = 'bitcoinj-core'
 
 dependencies {
-    compile 'org.bouncycastle:bcprov-jdk15to18:1.63'
+    api 'org.bouncycastle:bcprov-jdk15to18:1.63'
     implementation 'com.google.guava:guava:28.2-android'
-    compile 'com.google.protobuf:protobuf-java:3.6.1'
+    api 'com.google.protobuf:protobuf-java:3.6.1'
     implementation 'com.squareup.okhttp3:okhttp:3.12.8'
     implementation 'org.slf4j:slf4j-api:1.7.30'
     implementation 'net.jcip:jcip-annotations:1.0'
@@ -24,16 +24,31 @@ dependencies {
     testImplementation 'org.hamcrest:hamcrest-library:1.3'
 }
 
-sourceCompatibility = 1.7
-compileJava.options.encoding = 'UTF-8'
-compileTestJava.options.encoding = 'UTF-8'
-javadoc.options.encoding = 'UTF-8'
-
 protobuf {
     protoc {
-        artifact = 'com.google.protobuf:protoc:3.6.1'
+        if (System.getProperty('os.name').toLowerCase().contains('mac') &&
+                ['aarch64', 'arm64'].contains(System.getProperty('os.arch').toLowerCase())) {
+            artifact = 'com.google.protobuf:protoc:3.6.1:osx-x86_64'
+        } else {
+            artifact = 'com.google.protobuf:protoc:3.6.1'
+        }
     }
-    generatedFilesBaseDir = new File(projectDir, '/src') // workaround for '$projectDir/src'
+    generatedFilesBaseDir = new File(projectDir, 'src') // workaround for '$projectDir/src'
+}
+
+// Protobuf Java sources are checked in under src. With protobuf-gradle-plugin 0.9.x, the task
+// still generates under build/ first, so keep that intermediate output off the javac source path.
+sourceSets {
+    main.java.setSrcDirs(['src/main/java'])
+    test.java.setSrcDirs(['src/test/java'])
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('generateProto')
+}
+
+tasks.named('compileTestJava') {
+    dependsOn tasks.named('generateTestProto')
 }
 
 test {
@@ -41,6 +56,12 @@ test {
     exclude 'org/bitcoinj/core/TransactionBroadcastTest*'
     exclude 'org/bitcoinj/net/NetworkAbstractionTests*'
     exclude 'org/bitcoinj/protocols/channels/ChannelConnectionTest*'
+    if (System.getProperty('os.name').toLowerCase().contains('mac') &&
+            ['aarch64', 'arm64'].contains(System.getProperty('os.arch').toLowerCase())) {
+        exclude 'org/bitcoinj/core/LevelDBFullPrunedBlockChainTest*'
+        exclude 'org/bitcoinj/store/LevelDBBlockStoreTest*'
+    }
+    jvmArgs '--add-opens=java.base/java.lang=ALL-UNNAMED'
     testLogging {
         events "failed"
         exceptionFormat "full"
@@ -48,16 +69,27 @@ test {
 }
 
 task javadocJar(type: Jar, dependsOn: javadoc) {
-    classifier = 'javadoc'
+    archiveClassifier = 'javadoc'
     from javadoc.destinationDir
 }
 
 task sourcesJar(type: Jar, dependsOn: classes) {
-    classifier = 'sources'
+    archiveClassifier = 'sources'
     from sourceSets.main.allSource
 }
 
 artifacts {
     archives sourcesJar
     archives javadocJar
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifact sourcesJar
+            artifact javadocJar
+            artifactId = 'bitcoinj-core'
+        }
+    }
 }

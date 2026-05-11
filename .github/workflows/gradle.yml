@@ -8,11 +8,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04, macOS-15-intel, windows-2019]
-        java: ['11', '15']
+        java: ['21']
         distribution: ['zulu']
-        gradle: ['4.10.3']
       fail-fast: false
-    name: JAVA ${{ matrix.distribution }} ${{ matrix.java }} OS ${{ matrix.os }} Gradle ${{ matrix.gradle }}
+    name: JAVA ${{ matrix.distribution }} ${{ matrix.java }} OS ${{ matrix.os }}
     steps:
       - name: Git checkout
         uses: actions/checkout@v4
@@ -24,14 +23,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: ${{ matrix.gradle }}
+          gradle-version: '8.9'
       - name: Run Gradle
         run: gradle build --stacktrace
       - name: Upload Test Results and Reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bitcoinj-core-test-results-jdk${{ matrix.java }}-${{ matrix.os }}-${{ matrix.gradle }}
+          name: bitcoinj-core-test-results-jdk${{ matrix.java }}-${{ matrix.os }}
           path: |
             core/build/reports/tests/test/
             core/build/test-results/test/

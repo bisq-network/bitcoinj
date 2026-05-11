@@ -10,14 +10,9 @@ dependencies {
     implementation 'org.slf4j:slf4j-jdk14:1.7.30'
 }
 
-sourceCompatibility = 1.8
-compileJava.options.encoding = 'UTF-8'
-compileTestJava.options.encoding = 'UTF-8'
-javadoc.options.encoding = 'UTF-8'
-
 task wallet_tool(type: JavaExec) {
     description = 'Print and manipulate wallets.'
-    main = 'org.bitcoinj.tools.WalletTool'
+    mainClass = 'org.bitcoinj.tools.WalletTool'
     if (project.hasProperty('appArgs') && appArgs.length() > 0)
         args = Arrays.asList(appArgs.split("\\s+"))
     classpath = sourceSets.main.runtimeClasspath
@@ -25,7 +20,7 @@ task wallet_tool(type: JavaExec) {
 
 task build_checkpoints(type: JavaExec) {
     description = 'Create checkpoint files to use with CheckpointManager.'
-    main = 'org.bitcoinj.tools.BuildCheckpoints'
+    mainClass = 'org.bitcoinj.tools.BuildCheckpoints'
     if (project.hasProperty('appArgs') && appArgs.length() > 0)
         args = Arrays.asList(appArgs.split("\\s+"))
     classpath = sourceSets.main.runtimeClasspath
