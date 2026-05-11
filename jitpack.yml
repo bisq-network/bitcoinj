@@ -1,0 +1,6 @@
+before_install:
+  - sdk update
+  - sdk install java 22-open
+  - sdk use java 22-open
+install:
+  - ./gradlew clean -Pgroup=$GROUP -Pversion=$VERSION -xtest assemble publishToMavenLocal

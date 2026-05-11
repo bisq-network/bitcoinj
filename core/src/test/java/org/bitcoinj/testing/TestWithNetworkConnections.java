@@ -60,6 +60,7 @@ public class TestWithNetworkConnections {
     protected SocketAddress socketAddress;
 
     private NioServer[] peerServers = new NioServer[PEER_SERVERS];
+    private final InetSocketAddress[] peerServerAddresses = new InetSocketAddress[PEER_SERVERS];
     private final ClientConnectionManager channels;
     protected final BlockingQueue<InboundMessageQueuer> newPeerWriteTargetQueue = new LinkedBlockingQueue<>();
 
@@ -119,7 +120,7 @@ public class TestWithNetworkConnections {
             @Nullable
             @Override
             public StreamConnection getNewConnection(InetAddress inetAddress, int port) {
-                return new InboundMessageQueuer(UNITTEST) {
+                return new InboundMessageQueuer(UNITTEST, new InetSocketAddress(inetAddress, port)) {
                     @Override
                     public void connectionClosed() {
                     }
@@ -130,9 +131,17 @@ public class TestWithNetworkConnections {
                     }
                 };
             }
-        }, new InetSocketAddress(InetAddress.getLoopbackAddress(), 2000 + i));
+        }, new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
         peerServers[i].startAsync();
         peerServers[i].awaitRunning();
+        peerServerAddresses[i] = peerServers[i].getServerAddress();
+    }
+
+    protected InetSocketAddress peerServerAddress(int i) {
+        checkArgument(i >= 0 && i < PEER_SERVERS);
+        InetSocketAddress peerServerAddress = peerServerAddresses[i];
+        checkState(peerServerAddress != null, "Peer server %s has not been started", i);
+        return peerServerAddress;
     }
 
     public void tearDown() throws Exception {
@@ -145,8 +154,16 @@ public class TestWithNetworkConnections {
     }
 
     protected void stopPeerServer(int i) {
-        peerServers[i].stopAsync();
-        peerServers[i].awaitTerminated();
+        NioServer peerServer = peerServers[i];
+        if (peerServer == null)
+            return;
+        try {
+            peerServer.stopAsync();
+            peerServer.awaitTerminated();
+        } finally {
+            peerServers[i] = null;
+            peerServerAddresses[i] = null;
+        }
     }
 
     protected InboundMessageQueuer connect(Peer peer, VersionMessage versionMessage) throws Exception {
@@ -162,12 +179,13 @@ public class TestWithNetworkConnections {
                 }
             }
         });
+        InetSocketAddress address = peerServerAddress(0);
         if (clientType == ClientType.NIO_CLIENT_MANAGER || clientType == ClientType.BLOCKING_CLIENT_MANAGER)
-            channels.openConnection(new InetSocketAddress(InetAddress.getLoopbackAddress(), 2000), peer);
+            channels.openConnection(address, peer);
         else if (clientType == ClientType.NIO_CLIENT)
-            new NioClient(new InetSocketAddress(InetAddress.getLoopbackAddress(), 2000), peer, 100);
+            new NioClient(address, peer, 100);
         else if (clientType == ClientType.BLOCKING_CLIENT)
-            new BlockingClient(new InetSocketAddress(InetAddress.getLoopbackAddress(), 2000), peer, 100, SocketFactory.getDefault(), null);
+            new BlockingClient(address, peer, 100, SocketFactory.getDefault(), null);
         else
             throw new RuntimeException();
         // Claim we are connected to a different IP that what we really are, so tx confidence broadcastBy sets work
