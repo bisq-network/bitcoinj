@@ -39,6 +39,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.bouncycastle.crypto.params.KeyParameter;
+import org.bouncycastle.math.ec.ECPoint;
 
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -237,6 +238,32 @@ public class ECKeyTest {
         ECKey key = ECKey.signedMessageToKey(message, sigBase64);
         Address gotAddress = LegacyAddress.fromKey(MAINNET, key);
         assertEquals(expectedAddress, gotAddress);
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void pointCompressionCompatibilityOverloads() {
+        ECKey key = new ECKey();
+        ECPoint point = key.getPubKeyPoint();
+
+        ECPoint compressed = ECKey.compressPoint(point);
+        ECPoint decompressed = ECKey.decompressPoint(point);
+
+        assertArrayEquals(key.getPubKey(), compressed.getEncoded(true));
+        assertArrayEquals(key.decompress().getPubKey(), decompressed.getEncoded(false));
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void fromPublicOnlyPointCompatibilityOverloadDefaultsToCompressed() {
+        ECKey uncompressed = ECKey.fromPrivate(BigInteger.TEN, false);
+
+        ECKey pubOnly = ECKey.fromPublicOnly(uncompressed.getPubKeyPoint());
+
+        assertTrue(pubOnly.isPubKeyOnly());
+        assertTrue(pubOnly.isCompressed());
+        assertArrayEquals(ECKey.fromPublicOnly(uncompressed.getPubKeyPoint(), true).getPubKey(), pubOnly.getPubKey());
+        assertArrayEquals(uncompressed.getPubKey(), ECKey.fromPublicOnly(uncompressed.getPubKeyPoint(), false).getPubKey());
     }
 
     @Test

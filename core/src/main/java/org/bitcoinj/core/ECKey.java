@@ -201,9 +201,31 @@ public class ECKey implements EncryptableItem {
     /**
      * Utility for compressing an elliptic curve point. Returns the same point if it's already compressed.
      * See the ECKey class docs for a discussion of point compression.
+     *
+     * @deprecated use {@link #compressPoint(LazyECPoint)} when compression state must be tracked.
+     */
+    @Deprecated
+    public static ECPoint compressPoint(ECPoint point) {
+        return getPointWithCompression(point, true).get();
+    }
+
+    /**
+     * Utility for compressing an elliptic curve point. Returns the same point if it's already compressed.
+     * See the ECKey class docs for a discussion of point compression.
      */
     public static LazyECPoint compressPoint(LazyECPoint point) {
         return point.isCompressed() ? point : getPointWithCompression(point.get(), true);
+    }
+
+    /**
+     * Utility for decompressing an elliptic curve point. Returns the same point if it's already uncompressed.
+     * See the ECKey class docs for a discussion of point compression.
+     *
+     * @deprecated use {@link #decompressPoint(LazyECPoint)} when compression state must be tracked.
+     */
+    @Deprecated
+    public static ECPoint decompressPoint(ECPoint point) {
+        return getPointWithCompression(point, false).get();
     }
 
     /**
@@ -286,6 +308,18 @@ public class ECKey implements EncryptableItem {
      */
     public static ECKey fromPublicOnly(ECPoint pub, boolean compressed) {
         return new ECKey(null, pub, compressed);
+    }
+
+    /**
+     * Creates an ECKey that cannot be used for signing, only verifying signatures, from the given point. The resulting
+     * public key is compressed. Use {@link #fromPublicOnly(ECPoint, boolean)} when the desired public key encoding
+     * is known.
+     *
+     * @deprecated use {@link #fromPublicOnly(ECPoint, boolean)} to choose the public key encoding explicitly.
+     */
+    @Deprecated
+    public static ECKey fromPublicOnly(ECPoint pub) {
+        return fromPublicOnly(pub, true);
     }
 
     /**
