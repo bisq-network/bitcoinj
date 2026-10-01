@@ -135,6 +135,7 @@ public class Peer extends PeerSocketHandler {
     // Keyed by hash, because the table may have replaced the confidence object by the time the transaction arrives.
     @SuppressWarnings("MismatchedQueryAndUpdateOfCollection")
     private final HashMap<Sha256Hash, TransactionConfidence> pendingTxDownloads = new HashMap<>();
+    // While this many requests are unanswered, further transaction announcements are ignored.
     @VisibleForTesting
     static final int PENDING_TX_DOWNLOADS_LIMIT = 100;
     // The lowest version number we're willing to accept. Lower than this will result in an immediate disconnect.
@@ -1188,6 +1189,13 @@ public class Peer extends PeerSocketHandler {
 
         GetDataMessage getdata = new GetDataMessage(params);
 
+        if (!transactions.isEmpty() && pendingTxDownloads.size() >= PENDING_TX_DOWNLOADS_LIMIT) {
+            // Too many of our earlier requests are unanswered. Don't mark these as seen, so that a later announcement
+            // can still download them.
+            log.info("{}: Too many pending transactions, ignoring {} announced transactions", this, transactions.size());
+            transactions.clear();
+        }
+
         Iterator<InventoryItem> it = transactions.iterator();
         while (it.hasNext()) {
             InventoryItem item = it.next();
@@ -1210,11 +1218,6 @@ public class Peer extends PeerSocketHandler {
                 if (log.isDebugEnabled())
                     log.debug("{}: getdata on tx {}", getAddress(), item.hash);
                 getdata.addTransaction(item.hash, vPeerVersionMessage.isWitnessSupported());
-                if (pendingTxDownloads.size() > PENDING_TX_DOWNLOADS_LIMIT) {
-                    log.info("{}: Too many pending transactions, disconnecting", this);
-                    close();
-                    return;
-                }
                 // Register with the garbage collector that we care about the confidence data for a while.
                 pendingTxDownloads.put(item.hash, conf);
             }

@@ -316,6 +316,35 @@ public class PeerGroupTest extends TestWithPeerGroup {
         assertEquals(2, getdata.getItems().size());
     }
 
+    @Test
+    public void requestAllTransactionsOfALargeInv() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+
+        // The answer to the mempool query can announce more transactions than the limit of pending downloads.
+        inbound(p1, txInv(0, Peer.PENDING_TX_DOWNLOADS_LIMIT * 2));
+        GetDataMessage getdata = (GetDataMessage) outbound(p1);
+        assertEquals(Peer.PENDING_TX_DOWNLOADS_LIMIT * 2, getdata.getItems().size());
+        assertEquals(1, peerGroup.numConnectedPeers());
+    }
+
+    @Test
+    public void ignoreTxInvWhileRequestsAreUnanswered() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+        InboundMessageQueuer p2 = connectPeer(2);
+        inbound(p1, txInv(0, Peer.PENDING_TX_DOWNLOADS_LIMIT));
+        assertTrue(outbound(p1) instanceof GetDataMessage);
+
+        // While those requests are unanswered, further announcements are ignored and not marked as seen.
+        InventoryMessage inv = txInv(Peer.PENDING_TX_DOWNLOADS_LIMIT, 1);
+        inbound(p1, inv);
+        assertNull(outbound(p1));
+        // So another announcement still downloads them.
+        inbound(p2, inv);
+        assertTrue(outbound(p2) instanceof GetDataMessage);
+    }
+
     private InventoryMessage txInv(int first, int count) {
         InventoryMessage inv = new InventoryMessage(UNITTEST);
         for (int i = first; i < first + count; i++)
