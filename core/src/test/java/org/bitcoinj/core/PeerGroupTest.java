@@ -267,6 +267,44 @@ public class PeerGroupTest extends TestWithPeerGroup {
         pingAndWait(p1);
         assertEquals(value, wallet2.getBalance(Wallet.BalanceType.ESTIMATED));
     }
+
+    @Test
+    public void releaseArrivedTxEvictedFromConfidenceTable() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+
+        Address someoneElse = LegacyAddress.fromKey(UNITTEST, new ECKey());
+        List<Transaction> txs = new ArrayList<>();
+        InventoryMessage inv = new InventoryMessage(UNITTEST);
+        for (int i = 0; i < Peer.PENDING_TX_DOWNLOADS_LIMIT; i++) {
+            Transaction tx = FakeTxBuilder.createFakeTx(UNITTEST, COIN, someoneElse);
+            txs.add(tx);
+            inv.addTransaction(tx);
+        }
+        inbound(p1, inv);
+        assertTrue(outbound(p1) instanceof GetDataMessage);
+
+        // Other announcements, kept alive here, push the requested transactions out of the confidence table before
+        // they arrive.
+        List<TransactionConfidence> others = new ArrayList<>();
+        for (int i = 0; i < TxConfidenceTable.MAX_SIZE; i++)
+            others.add(Context.get().getConfidenceTable().getOrCreate(Sha256Hash.of(("other" + i).getBytes())));
+        for (Transaction tx : txs)
+            inbound(p1, tx);
+
+        // The arrived transactions are no longer pending, so new announcements are still downloaded.
+        inbound(p1, txInv(0, 2));
+        GetDataMessage getdata = (GetDataMessage) outbound(p1);
+        assertNotNull(getdata);
+        assertEquals(2, getdata.getItems().size());
+    }
+
+    private InventoryMessage txInv(int first, int count) {
+        InventoryMessage inv = new InventoryMessage(UNITTEST);
+        for (int i = first; i < first + count; i++)
+            inv.addItem(new InventoryItem(InventoryItem.Type.TRANSACTION, Sha256Hash.of(Integer.toString(i).getBytes())));
+        return inv;
+    }
     
     @Test
     public void singleDownloadPeer1() throws Exception {
