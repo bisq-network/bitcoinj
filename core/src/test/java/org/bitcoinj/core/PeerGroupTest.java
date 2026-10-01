@@ -299,6 +299,23 @@ public class PeerGroupTest extends TestWithPeerGroup {
         assertEquals(2, getdata.getItems().size());
     }
 
+    @Test
+    public void notFoundReleasesPendingTxDownloads() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+
+        // The peer announces as many transactions as the limit of pending downloads, then can't provide them.
+        inbound(p1, txInv(0, Peer.PENDING_TX_DOWNLOADS_LIMIT));
+        GetDataMessage getdata = (GetDataMessage) outbound(p1);
+        inbound(p1, new NotFoundMessage(UNITTEST, getdata.getItems()));
+
+        // Transactions announced afterwards are still downloaded.
+        inbound(p1, txInv(Peer.PENDING_TX_DOWNLOADS_LIMIT, 2));
+        getdata = (GetDataMessage) outbound(p1);
+        assertNotNull(getdata);
+        assertEquals(2, getdata.getItems().size());
+    }
+
     private InventoryMessage txInv(int first, int count) {
         InventoryMessage inv = new InventoryMessage(UNITTEST);
         for (int i = first; i < first + count; i++)

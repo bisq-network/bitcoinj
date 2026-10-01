@@ -631,6 +631,9 @@ public class Peer extends PeerSocketHandler {
                 }
             }
         }
+        // A transaction the peer couldn't find won't arrive, so it no longer counts as a pending download.
+        for (InventoryItem item : m.getItems())
+            pendingTxDownloads.remove(item.hash);
     }
 
     protected void processHeaders(HeadersMessage m) throws ProtocolException {
