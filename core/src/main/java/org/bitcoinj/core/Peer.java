@@ -29,6 +29,7 @@ import org.bitcoinj.utils.ListenerRegistration;
 import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.Wallet;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -131,9 +132,12 @@ public class Peer extends PeerSocketHandler {
     // Once the tx is downloaded (by some peer), the Transaction object that is created will have a reference to
     // the confidence object held inside it, and it's then up to the event listeners that receive the Transaction
     // to keep it pinned to the root set if they care about this data.
+    // Keyed by hash, because the table may have replaced the confidence object by the time the transaction arrives.
     @SuppressWarnings("MismatchedQueryAndUpdateOfCollection")
-    private final HashSet<TransactionConfidence> pendingTxDownloads = new HashSet<>();
-    private static final int PENDING_TX_DOWNLOADS_LIMIT = 100;
+    private final HashMap<Sha256Hash, TransactionConfidence> pendingTxDownloads = new HashMap<>();
+    // While this many requests are unanswered, further transaction announcements are ignored.
+    @VisibleForTesting
+    static final int PENDING_TX_DOWNLOADS_LIMIT = 100;
     // The lowest version number we're willing to accept. Lower than this will result in an immediate disconnect.
     private volatile int vMinProtocolVersion;
     // When an API user explicitly requests a block or transaction from a peer, the InventoryItem is put here
@@ -628,6 +632,9 @@ public class Peer extends PeerSocketHandler {
                 }
             }
         }
+        // A transaction the peer couldn't find won't arrive, so it no longer counts as a pending download.
+        for (InventoryItem item : m.getItems())
+            pendingTxDownloads.remove(item.hash);
     }
 
     protected void processHeaders(HeadersMessage m) throws ProtocolException {
@@ -746,7 +753,7 @@ public class Peer extends PeerSocketHandler {
             // and so on.
             TransactionConfidence confidence = tx.getConfidence();
             confidence.setSource(TransactionConfidence.Source.NETWORK);
-            pendingTxDownloads.remove(confidence);
+            pendingTxDownloads.remove(tx.getTxId());
             if (maybeHandleRequestedData(tx)) {
                 return;
             }
@@ -1182,6 +1189,13 @@ public class Peer extends PeerSocketHandler {
 
         GetDataMessage getdata = new GetDataMessage(params);
 
+        if (!transactions.isEmpty() && pendingTxDownloads.size() >= PENDING_TX_DOWNLOADS_LIMIT) {
+            // Too many of our earlier requests are unanswered. Don't mark these as seen, so that a later announcement
+            // can still download them.
+            log.info("{}: Too many pending transactions, ignoring {} announced transactions", this, transactions.size());
+            transactions.clear();
+        }
+
         Iterator<InventoryItem> it = transactions.iterator();
         while (it.hasNext()) {
             InventoryItem item = it.next();
@@ -1204,13 +1218,8 @@ public class Peer extends PeerSocketHandler {
                 if (log.isDebugEnabled())
                     log.debug("{}: getdata on tx {}", getAddress(), item.hash);
                 getdata.addTransaction(item.hash, vPeerVersionMessage.isWitnessSupported());
-                if (pendingTxDownloads.size() > PENDING_TX_DOWNLOADS_LIMIT) {
-                    log.info("{}: Too many pending transactions, disconnecting", this);
-                    close();
-                    return;
-                }
                 // Register with the garbage collector that we care about the confidence data for a while.
-                pendingTxDownloads.add(conf);
+                pendingTxDownloads.put(item.hash, conf);
             }
         }
 

@@ -267,6 +267,90 @@ public class PeerGroupTest extends TestWithPeerGroup {
         pingAndWait(p1);
         assertEquals(value, wallet2.getBalance(Wallet.BalanceType.ESTIMATED));
     }
+
+    @Test
+    public void releaseArrivedTxEvictedFromConfidenceTable() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+
+        Address someoneElse = LegacyAddress.fromKey(UNITTEST, new ECKey());
+        List<Transaction> txs = new ArrayList<>();
+        InventoryMessage inv = new InventoryMessage(UNITTEST);
+        for (int i = 0; i < Peer.PENDING_TX_DOWNLOADS_LIMIT; i++) {
+            Transaction tx = FakeTxBuilder.createFakeTx(UNITTEST, COIN, someoneElse);
+            txs.add(tx);
+            inv.addTransaction(tx);
+        }
+        inbound(p1, inv);
+        assertTrue(outbound(p1) instanceof GetDataMessage);
+
+        // Other announcements, kept alive here, push the requested transactions out of the confidence table before
+        // they arrive.
+        List<TransactionConfidence> others = new ArrayList<>();
+        for (int i = 0; i < TxConfidenceTable.MAX_SIZE; i++)
+            others.add(Context.get().getConfidenceTable().getOrCreate(Sha256Hash.of(("other" + i).getBytes())));
+        for (Transaction tx : txs)
+            inbound(p1, tx);
+
+        // The arrived transactions are no longer pending, so new announcements are still downloaded.
+        inbound(p1, txInv(0, 2));
+        GetDataMessage getdata = (GetDataMessage) outbound(p1);
+        assertNotNull(getdata);
+        assertEquals(2, getdata.getItems().size());
+    }
+
+    @Test
+    public void notFoundReleasesPendingTxDownloads() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+
+        // The peer announces as many transactions as the limit of pending downloads, then can't provide them.
+        inbound(p1, txInv(0, Peer.PENDING_TX_DOWNLOADS_LIMIT));
+        GetDataMessage getdata = (GetDataMessage) outbound(p1);
+        inbound(p1, new NotFoundMessage(UNITTEST, getdata.getItems()));
+
+        // Transactions announced afterwards are still downloaded.
+        inbound(p1, txInv(Peer.PENDING_TX_DOWNLOADS_LIMIT, 2));
+        getdata = (GetDataMessage) outbound(p1);
+        assertNotNull(getdata);
+        assertEquals(2, getdata.getItems().size());
+    }
+
+    @Test
+    public void requestAllTransactionsOfALargeInv() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+
+        // The answer to the mempool query can announce more transactions than the limit of pending downloads.
+        inbound(p1, txInv(0, Peer.PENDING_TX_DOWNLOADS_LIMIT * 2));
+        GetDataMessage getdata = (GetDataMessage) outbound(p1);
+        assertEquals(Peer.PENDING_TX_DOWNLOADS_LIMIT * 2, getdata.getItems().size());
+        assertEquals(1, peerGroup.numConnectedPeers());
+    }
+
+    @Test
+    public void ignoreTxInvWhileRequestsAreUnanswered() throws Exception {
+        peerGroup.start();
+        InboundMessageQueuer p1 = connectPeer(1);
+        InboundMessageQueuer p2 = connectPeer(2);
+        inbound(p1, txInv(0, Peer.PENDING_TX_DOWNLOADS_LIMIT));
+        assertTrue(outbound(p1) instanceof GetDataMessage);
+
+        // While those requests are unanswered, further announcements are ignored and not marked as seen.
+        InventoryMessage inv = txInv(Peer.PENDING_TX_DOWNLOADS_LIMIT, 1);
+        inbound(p1, inv);
+        assertNull(outbound(p1));
+        // So another announcement still downloads them.
+        inbound(p2, inv);
+        assertTrue(outbound(p2) instanceof GetDataMessage);
+    }
+
+    private InventoryMessage txInv(int first, int count) {
+        InventoryMessage inv = new InventoryMessage(UNITTEST);
+        for (int i = first; i < first + count; i++)
+            inv.addItem(new InventoryItem(InventoryItem.Type.TRANSACTION, Sha256Hash.of(Integer.toString(i).getBytes())));
+        return inv;
+    }
     
     @Test
     public void singleDownloadPeer1() throws Exception {
